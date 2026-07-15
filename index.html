@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -115,6 +116,20 @@ body{
 }
 #globeCanvas:active{cursor:grabbing;}
 #markerSvg{pointer-events:none;}
+.map-error{
+  position:absolute;
+  top:0; left:0;
+  width:100%; height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  padding:20px;
+  font-size:0.9rem;
+  color:#f2a0a0;
+  background:rgba(0,0,0,0.3);
+  border-radius:50%;
+}
 
 .hint-text{
   text-align:center;
@@ -228,6 +243,7 @@ body{
           <text id="pinMark" class="hidden" font-size="24" text-anchor="middle">📍</text>
           <text id="guessMark" class="hidden" font-size="18" text-anchor="middle">🎯</text>
         </svg>
+        <div id="mapError" class="hidden map-error"></div>
       </div>
     </div>
     <div class="hint-text" id="hintText">Drag to spin the globe. Click to lock in your answer.</div>
@@ -405,181 +421,14 @@ let answered = false;
 let guessLL = null;
 const results = [];
 
-// ---------- simplified world landmasses (used to paint the texture, not for rendering directly) ----------
-const landPolygons = [
-  [[-168,66],[-155,71],[-130,70],[-95,68],[-75,62],[-65,50],[-60,45],[-65,40],[-75,35],
-   [-80,25],[-87,21],[-97,16],[-92,14],[-84,9],[-79,8],[-83,15],[-95,20],[-105,22],
-   [-115,28],[-124,34],[-124,42],[-124,49],[-130,54],[-140,60],[-155,60],[-165,60],[-168,66]], // N America
-  [[-77,8],[-72,4],[-65,8],[-60,5],[-51,2],[-45,-3],[-35,-8],[-38,-15],[-40,-23],[-48,-27],
-   [-57,-35],[-62,-40],[-68,-45],[-73,-50],[-75,-53],[-70,-45],[-71,-30],[-70,-18],[-75,-10],
-   [-79,-5],[-81,0],[-77,8]], // S America
-  [[-10,43],[-9,38],[-6,36],[3,37],[12,38],[18,40],[23,36],[28,41],[30,45],[28,50],
-   [30,55],[28,60],[24,65],[20,69],[10,71],[5,62],[-5,58],[-8,50],[-5,48],[-10,43]], // Europe
-  [[-17,21],[-10,30],[-5,35],[10,37],[20,33],[25,32],[32,31],[35,28],[35,20],[43,12],
-   [51,12],[51,2],[45,-2],[40,-10],[35,-20],[32,-26],[28,-33],[20,-35],[15,-27],[12,-18],
-   [13,-8],[9,4],[3,6],[-5,5],[-10,10],[-17,14],[-17,21]], // Africa
-  [[30,55],[35,66],[45,68],[60,70],[75,73],[90,75],[105,73],[120,72],[135,70],[140,60],
-   [142,50],[135,45],[130,38],[122,32],[120,23],[112,18],[105,10],[100,6],[95,5],[88,20],
-   [78,8],[72,20],[68,24],[60,25],[50,26],[45,20],[40,13],[35,20],[28,38],[26,45],[30,55]], // Asia
-  [[113,-22],[115,-33],[118,-35],[130,-32],[137,-35],[141,-38],[147,-38],[150,-36],
-   [153,-28],[153,-22],[145,-16],[142,-11],[133,-11],[126,-14],[122,-17],[113,-22]], // Australia
-  [[-45,60],[-30,60],[-20,68],[-25,78],[-45,80],[-55,70],[-45,60]] // Greenland
-];
-
 function toRad(d){ return d * Math.PI / 180; }
 function toDeg(r){ return r * 180 / Math.PI; }
 
-// ---------- build the equirectangular "satellite" texture once, offscreen ----------
-let TW = 720, TH = 360;
+// ---------- satellite texture (real NASA "Blue Marble" imagery only — no fallback map) ----------
+let TW = 0, TH = 0;
 const texCanvas = document.createElement('canvas');
-texCanvas.width = TW; texCanvas.height = TH;
 const tctx = texCanvas.getContext('2d');
-
-// ---------- noise utilities (value noise + fbm) for organic-looking terrain/clouds/coastlines ----------
-function hashNoise(x, y, seed){
-  const s = Math.sin(x*127.1 + y*311.7 + seed*74.7) * 43758.5453;
-  return s - Math.floor(s);
-}
-function valueNoise(x, y, seed){
-  const x0 = Math.floor(x), y0 = Math.floor(y);
-  const xf = x - x0, yf = y - y0;
-  const v00 = hashNoise(x0,y0,seed), v10 = hashNoise(x0+1,y0,seed);
-  const v01 = hashNoise(x0,y0+1,seed), v11 = hashNoise(x0+1,y0+1,seed);
-  const sx = xf*xf*(3-2*xf), sy = yf*yf*(3-2*yf);
-  const top = v00 + sx*(v10-v00), bot = v01 + sx*(v11-v01);
-  return top + sy*(bot-top);
-}
-function fbm(x, y, seed, octaves){
-  let total=0, amp=0.5, freq=1, maxAmp=0;
-  for(let i=0;i<octaves;i++){
-    total += valueNoise(x*freq, y*freq, seed) * amp;
-    maxAmp += amp;
-    amp *= 0.5; freq *= 2;
-  }
-  return total / maxAmp;
-}
-// subdivide a ring's edges and perturb perpendicular to each edge for a natural, non-polygonal coastline
-function jitterRing(ring, seed){
-  const segments = 4, amp = 1.6;
-  const out = [];
-  for(let i=0;i<ring.length;i++){
-    const a = ring[i], b = ring[(i+1)%ring.length];
-    out.push(a);
-    const dx = b[0]-a[0], dy = b[1]-a[1];
-    const len = Math.sqrt(dx*dx+dy*dy) || 1;
-    const px = -dy/len, py = dx/len;
-    for(let s=1;s<segments;s++){
-      const t = s/segments;
-      let lon = a[0] + dx*t, lat = a[1] + dy*t;
-      const n = (fbm(lon*2+seed, lat*2+seed, seed, 2) - 0.5) * 2 * amp;
-      out.push([lon + px*n, lat + py*n]);
-    }
-  }
-  return out;
-}
-const jitteredLand = landPolygons.map((ring, i) => jitterRing(ring, i*17.3));
-
-function buildTexture(){
-  // ocean base with latitude gradient
-  const oceanGrad = tctx.createLinearGradient(0,0,0,TH);
-  oceanGrad.addColorStop(0, '#0b2540');
-  oceanGrad.addColorStop(0.5, '#14608f');
-  oceanGrad.addColorStop(1, '#0b2540');
-  tctx.fillStyle = oceanGrad;
-  tctx.fillRect(0,0,TW,TH);
-
-  // rasterize a land mask on a scratch canvas so we can shade land organically per-pixel
-  const maskCanvas = document.createElement('canvas');
-  maskCanvas.width = TW; maskCanvas.height = TH;
-  const mctx = maskCanvas.getContext('2d');
-  mctx.fillStyle = '#ff0000';
-  jitteredLand.forEach(ring => {
-    mctx.beginPath();
-    ring.forEach((pt,i) => {
-      const tx = (pt[0]+180)/360*TW, ty = (90-pt[1])/180*TH;
-      if(i===0) mctx.moveTo(tx,ty); else mctx.lineTo(tx,ty);
-    });
-    mctx.closePath();
-    mctx.fill();
-  });
-  const mask = mctx.getImageData(0,0,TW,TH).data;
-
-  // per-pixel organic shading: fbm-driven terrain color on land, subtle depth variation on ocean
-  const img = tctx.getImageData(0,0,TW,TH);
-  const d = img.data;
-  for(let y=0;y<TH;y++){
-    for(let x=0;x<TW;x++){
-      const idx = (y*TW+x)*4;
-      const isLand = mask[idx] > 200 && mask[idx+1] < 60;
-      const nx = x/28, ny = y/28;
-      if(isLand){
-        const elev = fbm(nx, ny, 5.2, 5);
-        const moisture = fbm(nx+50, ny+50, 9.1, 4);
-        let r,g,b;
-        if(elev < 0.42){ // lowland green
-          r = 74 + moisture*30; g = 112 + moisture*35; b = 58 + moisture*20;
-        } else if(elev < 0.6){ // hill/savanna
-          r = 128 + moisture*40; g = 118 + moisture*30; b = 72 + moisture*15;
-        } else { // mountain/arid
-          r = 150 + elev*60; g = 128 + elev*40; b = 105 + elev*30;
-        }
-        d[idx] = Math.min(255, r); d[idx+1] = Math.min(255, g); d[idx+2] = Math.min(255, b);
-      } else {
-        const depth = fbm(nx*1.4, ny*1.4, 3.3, 4);
-        d[idx]   = Math.min(255, d[idx]   + (depth-0.5)*22);
-        d[idx+1] = Math.min(255, d[idx+1] + (depth-0.5)*22);
-        d[idx+2] = Math.min(255, d[idx+2] + (depth-0.5)*14);
-      }
-    }
-  }
-  tctx.putImageData(img, 0, 0);
-
-  // coastline edge
-  tctx.strokeStyle = 'rgba(20,35,20,0.25)';
-  tctx.lineWidth = 0.6;
-  jitteredLand.forEach(ring => {
-    tctx.beginPath();
-    ring.forEach((pt,i) => {
-      const tx = (pt[0]+180)/360*TW, ty = (90-pt[1])/180*TH;
-      if(i===0) tctx.moveTo(tx,ty); else tctx.lineTo(tx,ty);
-    });
-    tctx.closePath();
-    tctx.stroke();
-  });
-
-  // polar ice caps
-  const northIce = tctx.createLinearGradient(0,0,0,TH*0.11);
-  northIce.addColorStop(0, 'rgba(240,248,255,0.95)');
-  northIce.addColorStop(1, 'rgba(240,248,255,0)');
-  tctx.fillStyle = northIce;
-  tctx.fillRect(0,0,TW,TH*0.11);
-  const southIce = tctx.createLinearGradient(0,TH,0,TH*0.89);
-  southIce.addColorStop(0, 'rgba(240,248,255,0.95)');
-  southIce.addColorStop(1, 'rgba(240,248,255,0)');
-  tctx.fillStyle = southIce;
-  tctx.fillRect(0,TH*0.89,TW,TH*0.11);
-
-  // fbm cloud layer, painted directly into the pixel buffer for soft organic swirls
-  const img2 = tctx.getImageData(0,0,TW,TH);
-  const d2 = img2.data;
-  for(let y=0;y<TH;y++){
-    for(let x=0;x<TW;x++){
-      const nx = x/60, ny = y/60;
-      const c = fbm(nx, ny, 22.4, 5);
-      const cloud = Math.max(0, (c - 0.55) / 0.45); // 0..1 above threshold
-      if(cloud > 0){
-        const idx = (y*TW+x)*4;
-        const a = cloud * 0.85;
-        d2[idx]   = d2[idx]*(1-a)   + 255*a;
-        d2[idx+1] = d2[idx+1]*(1-a) + 255*a;
-        d2[idx+2] = d2[idx+2]*(1-a) + 255*a;
-      }
-    }
-  }
-  tctx.putImageData(img2, 0, 0);
-}
-buildTexture(); // pre-draw a stylized fallback immediately so texData is always valid
-let texData = tctx.getImageData(0,0,TW,TH).data;
+let texData = null;
 
 function sampleTexture(lonDeg, latDeg){
   let lon = ((lonDeg + 540) % 360) - 180;
@@ -598,21 +447,29 @@ function onTextureReady(){
   renderSphere();
 }
 
-// Try to load real NASA "Blue Marble" satellite imagery (land/ocean/ice/cloud composite).
-// Falls back to the procedural texture above if the network is unavailable or the image is blocked.
+function showMapError(message){
+  document.getElementById('mapError').textContent = message;
+  document.getElementById('mapError').classList.remove('hidden');
+  const btn = document.getElementById('startBtn');
+  btn.disabled = true;
+  btn.textContent = 'Map unavailable';
+}
+
+// Load real NASA "Blue Marble" satellite imagery (land/ocean/ice/cloud composite). No fallback —
+// if this fails to load, the game shows an error instead of silently drawing a fake map.
 let settled = false;
 const earthImg = new Image();
 earthImg.crossOrigin = 'anonymous';
-const fallbackTimer = setTimeout(() => {
+const failTimer = setTimeout(() => {
   if(settled) return;
   settled = true;
-  onTextureReady();
-}, 5000);
+  showMapError("Satellite imagery timed out. Check your connection and reload.");
+}, 8000);
 
 earthImg.onload = () => {
   if(settled) return;
   settled = true;
-  clearTimeout(fallbackTimer);
+  clearTimeout(failTimer);
   try{
     TW = earthImg.naturalWidth;
     TH = earthImg.naturalHeight;
@@ -621,19 +478,14 @@ earthImg.onload = () => {
     texData = tctx.getImageData(0,0,TW,TH).data; // throws if canvas is tainted (CORS)
     onTextureReady();
   } catch(e){
-    // CORS-tainted canvas or other failure — rebuild the stylized fallback at default size
-    TW = 720; TH = 360;
-    texCanvas.width = TW; texCanvas.height = TH;
-    buildTexture();
-    texData = tctx.getImageData(0,0,TW,TH).data;
-    onTextureReady();
+    showMapError("Satellite imagery couldn't be read (blocked by browser security policy).");
   }
 };
 earthImg.onerror = () => {
   if(settled) return;
   settled = true;
-  clearTimeout(fallbackTimer);
-  onTextureReady();
+  clearTimeout(failTimer);
+  showMapError("Satellite imagery failed to load. Check your connection and reload.");
 };
 earthImg.src = 'https://commons.wikimedia.org/wiki/Special:FilePath/Land_ocean_ice_cloud_1024.jpg';
 
@@ -713,6 +565,7 @@ const outImage = ctx.createImageData(W,H);
 const outData = outImage.data;
 
 function renderSphere(){
+  if(!texData) return;
   const lambda0 = toRad(-rotation[0]), phi0 = toRad(-rotation[1]);
   const sinPhi0 = Math.sin(phi0), cosPhi0 = Math.cos(phi0);
   outData.fill(0);
