@@ -6,7 +6,6 @@
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');
 
-  
 :root{
   --bg:#05070d;
   --panel:#f4f6f9;
@@ -203,7 +202,7 @@ body{
 
   <div id="intro" class="center-card">
     <h1>🛰️ Globe Trivia</h1>
-    <p>Nine geography questions. Spin the satellite view, click where you think the answer is, and score points based on how close you land — up to 5,000 per round.</p>
+    <p>Landmarks from every continent. Spin the satellite view, click where you think the answer is, and score points based on how close you land — up to 5,000 per round.</p>
     <button class="start-btn" id="startBtn" disabled>Loading imagery…</button>
   </div>
 
@@ -259,15 +258,144 @@ body{
 
 <script>
 const questions = [
+  // Landmarks & natural wonders
   { clue: "This ancient wonder rises from a plateau on the edge of Cairo, once guarded by a limestone sphinx.", place: "Great Pyramid of Giza, Egypt", lat: 29.9792, lon: 31.1342 },
   { clue: "An iron lattice tower overlooks this city on the Seine, built for a World's Fair in 1889.", place: "Paris, France", lat: 48.8566, lon: 2.3522 },
-  { clue: "Terraced ruins hide in the Andes above a river valley, rediscovered by the world in 1911.", place: "Machu Picchu, Peru", lat: 13.1631, lon: -72.5450 },
+  { clue: "Terraced ruins hide in the Andes above a river valley, rediscovered by the world in 1911.", place: "Machu Picchu, Peru", lat: -13.1631, lon: -72.5450 },
   { clue: "A sail-shaped concert hall perches on a harbor in the country nicknamed 'the Land Down Under'.", place: "Sydney, Australia", lat: -33.8568, lon: 151.2153 },
   { clue: "Africa's tallest peak wears a snowcap near the equator, in the shadow of the Serengeti.", place: "Mount Kilimanjaro, Tanzania", lat: -3.0674, lon: 37.3556 },
   { clue: "A red-brick fortress and a vast cobbled square anchor this northern capital.", place: "Moscow, Russia", lat: 55.7558, lon: 37.6173 },
   { clue: "Just south of the equator, a giant statue of Christ watches over Carnival crowds and a famous beach.", place: "Rio de Janeiro, Brazil", lat: -22.9068, lon: -43.1729 },
   { clue: "A white marble mausoleum glows at sunrise along a river in northern India.", place: "Agra, India (Taj Mahal)", lat: 27.1751, lon: 78.0421 },
-  { clue: "A snow-capped volcano looms beyond the skyline of this island nation's sprawling capital.", place: "Tokyo, Japan", lat: 35.6762, lon: 139.6503 }
+  { clue: "A snow-capped volcano looms beyond the skyline of this island nation's sprawling capital.", place: "Tokyo, Japan", lat: 35.6762, lon: 139.6503 },
+  { clue: "A fortified stone rampart winds across northern hills for thousands of kilometers, a symbol of empire.", place: "Great Wall of China (near Beijing)", lat: 40.4319, lon: 116.5704 },
+  { clue: "A copper-green robed figure holds a torch aloft on an island at the mouth of a harbor.", place: "Statue of Liberty, New York, USA", lat: 40.6892, lon: -74.0445 },
+  { clue: "A ring of ancient arches once hosted gladiators in the heart of an old imperial capital.", place: "Colosseum, Rome, Italy", lat: 41.8902, lon: 12.4922 },
+  { clue: "A massive red sandstone monolith glows at sunset in the middle of a vast desert outback.", place: "Uluru, Australia", lat: -25.3444, lon: 131.0369 },
+  { clue: "Thundering water spills over a horseshoe-shaped cliff along a border shared by two countries.", place: "Niagara Falls (Canada/USA)", lat: 43.0962, lon: -79.0377 },
+  { clue: "A rose-colored city is carved directly into desert canyon walls, reached through a narrow rock gorge.", place: "Petra, Jordan", lat: 30.3285, lon: 35.4444 },
+  { clue: "A sprawling stone temple complex, once the heart of a Khmer empire, is reclaimed by jungle roots.", place: "Angkor Wat, Cambodia", lat: 13.4125, lon: 103.8670 },
+  { clue: "A flat-topped mountain overlooks a harbor city at the southern tip of a continent.", place: "Cape Town, South Africa", lat: -33.9628, lon: 18.4098 },
+  { clue: "Geysers, glaciers, and volcanoes share this island nation just south of the Arctic Circle.", place: "Reykjavik, Iceland", lat: 64.1466, lon: -21.9426 },
+  { clue: "A stepped pyramid rises from the jungle of a peninsula once ruled by the Maya.", place: "Chichén Itzá, Mexico", lat: 20.6843, lon: -88.5678 },
+  { clue: "Fjords carve deep into this Scandinavian coastline beneath the midnight sun.", place: "Oslo, Norway", lat: 59.9139, lon: 10.7522 },
+  { clue: "A walled old city and a famous bridge span a river where East and West have long met.", place: "Istanbul, Turkey", lat: 41.0082, lon: 28.9784 },
+  { clue: "Coral stretches for over 2,000 km along a tropical coastline, visible even from space.", place: "Great Barrier Reef, Australia", lat: -16.9203, lon: 145.7710 },
+  { clue: "A curtain of mist and thunder falls between two nations along a wide African river.", place: "Victoria Falls (Zambia/Zimbabwe)", lat: -17.9243, lon: 25.8572 },
+  { clue: "A mile-deep gorge exposes nearly two billion years of rock layers in a high desert plateau.", place: "Grand Canyon, USA", lat: 36.1069, lon: -112.1129 },
+  { clue: "The roof of the world rises higher than any other point on Earth, on a border between two nations.", place: "Mount Everest, Nepal/Tibet", lat: 27.9881, lon: 86.9250 },
+  { clue: "Dunes stretch to every horizon in the world's largest hot desert.", place: "Sahara Desert (near Tamanrasset, Algeria)", lat: 22.7850, lon: 5.5228 },
+  { clue: "The world's largest rainforest drains into a river carrying more water than the next seven rivers combined.", place: "Amazon Rainforest (near Manaus, Brazil)", lat: -3.1190, lon: -60.0217 },
+  { clue: "Research stations dot the coldest, driest, windiest continent on Earth.", place: "Antarctica (McMurdo Station)", lat: -77.8419, lon: 166.6863 },
+  { clue: "This landlocked sea is so salty that swimmers float effortlessly on its surface.", place: "The Dead Sea", lat: 31.5000, lon: 35.5000 },
+  { clue: "A great crack in the Earth's crust splits east Africa, dotted with volcanoes and soda lakes.", place: "Great Rift Valley (near Nairobi, Kenya)", lat: -1.2921, lon: 36.8219 },
+  { clue: "Geysers and hot springs bubble over the caldera of a slumbering supervolcano.", place: "Yellowstone National Park, USA", lat: 44.4280, lon: -110.5885 },
+  { clue: "Giant tortoises and finches inspired a young naturalist's theory of evolution on these volcanic islands.", place: "Galápagos Islands, Ecuador", lat: -0.9538, lon: -90.9656 },
+  { clue: "Western Europe's tallest peak straddles a border between two Alpine nations.", place: "Mont Blanc (France/Italy)", lat: 45.8326, lon: 6.8652 },
+  { clue: "Camel caravans once carried salt and gold through this fabled desert trading city.", place: "Timbuktu, Mali", lat: 16.7666, lon: -3.0026 },
+  { clue: "Massive standing stones were arranged into a circle on an English plain some 5,000 years ago.", place: "Stonehenge, England", lat: 51.1789, lon: -1.8262 },
+  { clue: "Thousands of life-sized clay soldiers were buried to guard a Chinese emperor's tomb.", place: "Terracotta Army, Xi'an, China", lat: 34.3841, lon: 109.2785 },
+
+  // Historical events
+  { clue: "Crowds tore down a concrete barrier in 1989, reuniting a divided city after nearly three decades.", place: "Fall of the Berlin Wall, Germany", lat: 52.5163, lon: 13.3777 },
+  { clue: "An angry crowd stormed a royal fortress-prison in 1789, sparking a revolution that toppled a monarchy.", place: "Storming of the Bastille, Paris", lat: 48.8530, lon: 2.3499 },
+  { clue: "Allied troops stormed a stretch of Normandy beach in 1944, opening a second front against Nazi Germany.", place: "Omaha Beach, Normandy, France", lat: 49.3400, lon: -0.8000 },
+  { clue: "A surprise naval air attack in 1941 pulled a reluctant nation into a world war.", place: "Pearl Harbor, Hawaii, USA", lat: 21.3649, lon: -157.9500 },
+  { clue: "The first city ever struck by a nuclear weapon in wartime, in August 1945.", place: "Hiroshima, Japan", lat: 34.3853, lon: 132.4553 },
+  { clue: "A 'unsinkable' ocean liner met an iceberg here in 1912 and now rests nearly 4,000 meters down.", place: "Titanic wreck site, North Atlantic", lat: 41.7325, lon: -49.9469 },
+  { clue: "Two bicycle mechanics achieved the first powered flight on a windswept dune in 1903.", place: "Kitty Hawk, North Carolina, USA", lat: 36.0134, lon: -75.6685 },
+  { clue: "A Saturn V rocket lifted three astronauts toward the Moon from this Florida launch pad in 1969.", place: "Cape Canaveral, Florida, USA", lat: 28.5721, lon: -80.6480 },
+  { clue: "Colonists dumped crates of taxed tea into a harbor in 1773 to protest British rule.", place: "Boston, Massachusetts, USA", lat: 42.3552, lon: -71.0508 },
+  { clue: "Delegates gathered in this city in 1776 to sign a document declaring independence from Britain.", place: "Philadelphia, Pennsylvania, USA", lat: 39.9483, lon: -75.1503 },
+  { clue: "Revolutionaries stormed the Winter Palace in 1917, toppling a centuries-old monarchy.", place: "St. Petersburg, Russia", lat: 59.9311, lon: 30.3609 },
+  { clue: "A lavish royal palace hosted the signing of the treaty that ended the First World War in 1919.", place: "Palace of Versailles, France", lat: 48.8049, lon: 2.1204 },
+  { clue: "English barons forced a king to seal a charter of liberties on a riverside meadow in 1215.", place: "Runnymede, England", lat: 51.4416, lon: -0.5615 },
+  { clue: "A former emperor made his last stand against allied European armies in 1815, on a muddy Belgian field.", place: "Waterloo, Belgium", lat: 50.6787, lon: 4.4009 },
+  { clue: "The bloodiest battle of the American Civil War was fought over three days in 1863 near this town.", place: "Gettysburg, Pennsylvania, USA", lat: 39.8309, lon: -77.2311 },
+  { clue: "A nuclear reactor exploded in 1986, forcing the evacuation of an entire Soviet city.", place: "Pripyat, Ukraine (Chernobyl)", lat: 51.4062, lon: 30.0575 },
+  { clue: "The assassination of an Austrian archduke in this city in 1914 helped ignite a world war.", place: "Sarajevo, Bosnia and Herzegovina", lat: 43.8563, lon: 18.4131 },
+  { clue: "Archaeologists found a boy-pharaoh's golden tomb almost untouched in this valley in 1922.", place: "Valley of the Kings, Luxor, Egypt", lat: 25.7402, lon: 32.6014 },
+  { clue: "A barefoot march to the sea in 1930 became a turning point in a colony's struggle for independence.", place: "Dandi, India", lat: 21.3771, lon: 72.8567 },
+  { clue: "After 27 years, a future president walked free from prison in 1990 to a jubilant crowd.", place: "Paarl, South Africa", lat: -33.7346, lon: 18.9713 },
+  { clue: "A political prisoner spent 18 years breaking rocks on this windswept island before becoming president.", place: "Robben Island, South Africa", lat: -33.8065, lon: 18.3701 },
+  { clue: "The first modern Olympic Games were held in this ancient stadium in 1896.", place: "Athens, Greece", lat: 37.9686, lon: 23.7348 },
+  { clue: "Legend says a wooden horse ended a decade-long siege at this ancient city's gates.", place: "Troy, Turkey", lat: 39.9575, lon: 26.2389 },
+  { clue: "A young conqueror founded this Mediterranean city in 331 BC, naming it after himself.", place: "Alexandria, Egypt", lat: 31.2001, lon: 29.9187 },
+  { clue: "Hanging gardens were said to rise in terraces above this ancient Mesopotamian capital.", place: "Ruins of Babylon, Iraq", lat: 32.5355, lon: 44.4275 },
+  { clue: "One of the Seven Wonders of the Ancient World once towered over this Greek island's harbor.", place: "Rhodes, Greece", lat: 36.4341, lon: 28.2176 },
+  { clue: "A temple to a Greek goddess, four times the size of the Parthenon, once stood in this ancient city.", place: "Ephesus, Turkey", lat: 37.9394, lon: 27.3417 },
+  { clue: "Emperors once ruled from this vast red-walled palace complex, forbidden to commoners for 500 years.", place: "Forbidden City, Beijing", lat: 39.9163, lon: 116.3972 },
+  { clue: "Soviet missiles discovered on this island in 1962 brought the world to the brink of nuclear war.", place: "Havana, Cuba", lat: 23.1136, lon: -82.3666 },
+  { clue: "A president's motorcade passed through this city's Dealey Plaza in 1963, moments before his assassination.", place: "Dallas, Texas, USA", lat: 32.7767, lon: -96.7970 },
+  { clue: "Half a million people gathered on a dairy farm in 1969 for three days of peace and music.", place: "Bethel, New York, USA", lat: 41.6987, lon: -74.8843 },
+  { clue: "Norse explorers built the first known European settlement in North America here, around 1000 AD.", place: "L'Anse aux Meadows, Canada", lat: 51.5977, lon: -55.5305 },
+  { clue: "A famous Venetian merchant returned home in 1295 with tales of his travels along the Silk Road.", place: "Venice, Italy", lat: 45.4408, lon: 12.3155 },
+  { clue: "In 1492, three ships made landfall on this Caribbean island, opening an age of transatlantic contact.", place: "San Salvador, Bahamas", lat: 24.0180, lon: -74.5285 },
+  { clue: "A fleet set sail from this Spanish port in 1519 on the first voyage to circle the globe.", place: "Seville, Spain", lat: 37.3891, lon: -5.9845 },
+  { clue: "A British naval captain first charted this Pacific coastline's eastern shore in 1770.", place: "Botany Bay, Australia", lat: -34.0022, lon: 151.1997 },
+  { clue: "A pioneering aviator vanished somewhere over the Pacific after her last confirmed takeoff from this town.", place: "Lae, Papua New Guinea", lat: -6.7330, lon: 146.9962 },
+  { clue: "A solo aviator landed to a cheering crowd of thousands after the first nonstop transatlantic flight in 1927.", place: "Le Bourget, Paris, France", lat: 48.9694, lon: 2.4414 },
+  { clue: "A torpedoed ocean liner sank off this coastline in 1915, helping draw the US toward war.", place: "Old Head of Kinsale, Ireland", lat: 51.6000, lon: -8.5333 },
+  { clue: "Two towers fell in this city's financial district on a September morning in 2001.", place: "New York City, USA (Ground Zero)", lat: 40.7115, lon: -74.0134 },
+  { clue: "Delegates from 50 nations founded a global peacekeeping body headquartered on this riverside site in 1945.", place: "United Nations HQ, New York City", lat: 40.7489, lon: -73.9680 },
+  { clue: "Tanks rolled into this capital in 1975 as a decades-long war reached its final chapter.", place: "Ho Chi Minh City (Saigon), Vietnam", lat: 10.7769, lon: 106.7009 },
+  { clue: "An armistice signed in a small border village in 1953 froze a peninsula's conflict without ending it.", place: "Panmunjom, Korean DMZ", lat: 37.9573, lon: 126.6733 },
+  { clue: "A lightning war in 1967 redrew borders across this holy city and its surroundings in less than a week.", place: "Jerusalem", lat: 31.7683, lon: 35.2137 },
+  { clue: "Two Middle Eastern leaders shook hands after secret talks at a US presidential retreat in 1978.", place: "Camp David, Maryland, USA", lat: 39.6483, lon: -77.4675 },
+  { clue: "A canal opened in 1869 linking the Mediterranean and Red Seas, reshaping global shipping routes.", place: "Suez Canal (Port Said, Egypt)", lat: 31.2653, lon: 32.3019 },
+  { clue: "An engineering feat opened in 1914, letting ships cross a narrow isthmus between two oceans.", place: "Panama Canal (Panama City)", lat: 8.9824, lon: -79.5199 },
+  { clue: "The world's first nuclear weapon was detonated in a remote desert basin in July 1945.", place: "Trinity Site, New Mexico, USA", lat: 33.6772, lon: -106.4753 },
+  { clue: "A beeping metal sphere launched from this remote steppe site in 1957, opening the Space Age.", place: "Baikonur Cosmodrome, Kazakhstan", lat: 45.9646, lon: 63.3052 },
+  { clue: "A volcanic island erupted with a bang heard thousands of kilometers away in 1883.", place: "Krakatoa, Indonesia", lat: -6.1023, lon: 105.4230 },
+  { clue: "A Roman city was buried in ash and pumice when a nearby volcano erupted in 79 AD, preserving it for centuries.", place: "Pompeii, Italy", lat: 40.7461, lon: 14.4989 },
+  { clue: "A Jewish teenager hid in a secret annex in this city during the Nazi occupation, keeping a now-famous diary.", place: "Amsterdam, Netherlands", lat: 52.3676, lon: 4.9041 },
+  { clue: "Allied tribunals in this German city put Nazi leaders on trial for war crimes after World War II.", place: "Nuremberg, Germany", lat: 49.4521, lon: 11.0767 },
+  { clue: "A British statesman warned of an 'iron curtain' descending across Europe in a 1946 speech in this small town.", place: "Fulton, Missouri, USA", lat: 38.8406, lon: -91.9471 },
+  { clue: "Soviet tanks crushed a brief flowering of political reform in this Czech capital in 1968.", place: "Prague, Czech Republic", lat: 50.0755, lon: 14.4378 },
+  { clue: "Student-led demonstrations filled this vast city square in 1989 before a crackdown ended them.", place: "Tiananmen Square, Beijing", lat: 39.9055, lon: 116.3976 },
+  { clue: "A memorial in this East African capital honors the roughly 800,000 people killed in a 1994 genocide.", place: "Kigali, Rwanda", lat: -1.9441, lon: 30.0619 },
+  { clue: "An invading army crossed the English Channel and defeated a Saxon king near this coastal town in 1066.", place: "Hastings, England", lat: 50.8543, lon: 0.5741 },
+  { clue: "A great fire swept through this city's wooden streets in 1666, destroying most of its medieval core.", place: "London, England", lat: 51.5074, lon: -0.1278 },
+  { clue: "A storm-battered invasion fleet was scattered and defeated off this coastline in 1588.", place: "Gravelines, France (English Channel)", lat: 51.0122, lon: 2.1250 },
+  { clue: "A nomadic Turkish tribe founded an empire from this city that would one day stretch across three continents.", place: "Bursa, Turkey", lat: 40.1885, lon: 29.0610 },
+  { clue: "English settlers established their first permanent colony in the Americas here in 1607.", place: "Jamestown, Virginia, USA", lat: 37.2154, lon: -76.7756 },
+  { clue: "A Zulu army stunned the British Empire with a decisive victory near this hill in 1879.", place: "Isandlwana, South Africa", lat: -28.3667, lon: 30.6667 },
+  { clue: "A 14th-century scholar set out from this Moroccan port city on decades of travels across the Islamic world.", place: "Tangier, Morocco", lat: 35.7595, lon: -5.8340 },
+  { clue: "A meteor exploded over this Siberian forest in 1908, flattening 80 million trees for miles around.", place: "Tunguska, Siberia, Russia", lat: 60.8858, lon: 101.8942 },
+  { clue: "The world's first successful heart transplant was performed in this South African hospital in 1967.", place: "Cape Town, South Africa (Groote Schuur Hospital)", lat: -33.9411, lon: 18.4645 },
+  { clue: "A telegraph message from this Newfoundland hilltop confirmed the first transatlantic wireless signal in 1901.", place: "Signal Hill, St. John's, Canada", lat: 47.5675, lon: -52.6822 },
+  { clue: "Gold was discovered in a sawmill's tailrace near this California town in 1848, sparking a rush of prospectors.", place: "Coloma, California, USA", lat: 38.8016, lon: -120.8894 },
+  { clue: "A pharaoh's obelisks and temples still line the banks of the Nile at this southern Egyptian city.", place: "Luxor, Egypt", lat: 25.6872, lon: 32.6396 },
+  { clue: "An ancient trade route city carved into pink cliffs once thrived as a crossroads of caravans (again, a different one).", place: "Palmyra, Syria", lat: 34.5622, lon: 38.2745 },
+  { clue: "A medieval West African empire grew fabulously wealthy on gold and salt trade routes through this region.", place: "Gao, Mali (Songhai Empire)", lat: 16.2666, lon: -0.0500 },
+  { clue: "A tsunami triggered by an undersea earthquake devastated coastlines across this ocean basin in 2004.", place: "Banda Aceh, Indonesia", lat: 5.5483, lon: 95.3238 },
+  { clue: "An earthquake and resulting fires destroyed most of this American city in 1906.", place: "San Francisco, California, USA", lat: 37.7749, lon: -122.4194 },
+  { clue: "A wall of water from a collapsed dam devastated this Pennsylvania town in 1889.", place: "Johnstown, Pennsylvania, USA", lat: 40.3267, lon: -78.9220 },
+  { clue: "A hurricane's floodwaters overwhelmed the levees of this Gulf Coast city in 2005.", place: "New Orleans, Louisiana, USA", lat: 29.9511, lon: -90.0715 },
+  { clue: "An earthquake and tsunami triggered a nuclear meltdown at a coastal power plant here in 2011.", place: "Fukushima, Japan", lat: 37.4213, lon: 141.0329 },
+  { clue: "A Portuguese explorer became the first European to round the southern tip of Africa by sea in 1488.", place: "Cape of Good Hope, South Africa", lat: -34.3568, lon: 18.4740 },
+  { clue: "Spanish conquistadors toppled an Incan emperor and claimed his mountain capital in 1533.", place: "Cusco, Peru", lat: -13.5319, lon: -71.9675 },
+  { clue: "An Aztec capital built on a lake was conquered by Spanish forces in 1521, becoming a new colonial capital.", place: "Mexico City, Mexico (Tenochtitlan)", lat: 19.4326, lon: -99.1332 },
+  { clue: "A gold-obsessed search for a mythical city drew Spanish explorers deep into this South American interior.", place: "Bogotá, Colombia (El Dorado legend)", lat: 4.7110, lon: -74.0721 },
+  { clue: "The first successful powered submarine attack in naval history sank a ship off this American harbor in 1864.", place: "Charleston, South Carolina, USA", lat: 32.7765, lon: -79.9311 },
+  { clue: "A shot fired at this Massachusetts town's bridge in 1775 was called 'the shot heard round the world.'", place: "Concord, Massachusetts, USA", lat: 42.4604, lon: -71.3489 },
+  { clue: "An assassin's bullet in this Balkan capital's streets set off a chain reaction that engulfed Europe in war.", place: "Sarajevo (Latin Bridge)", lat: 43.8586, lon: 18.4297 },
+  { clue: "A young queen was crowned in this abbey in 1953, broadcast to millions on the new medium of television.", place: "Westminster Abbey, London", lat: 51.4993, lon: -0.1273 },
+  { clue: "Revolutionaries executed a king and queen in this city's central square in 1793.", place: "Place de la Concorde, Paris", lat: 48.8656, lon: 2.3212 },
+  { clue: "A charismatic leader delivered his 'I Have a Dream' speech from these steps in 1963.", place: "Lincoln Memorial, Washington DC, USA", lat: 38.8893, lon: -77.0502 },
+  { clue: "A wall of fire and ash from a 1980 eruption flattened forests for miles around this Pacific Northwest peak.", place: "Mount St. Helens, Washington, USA", lat: 46.1912, lon: -122.1944 },
+  { clue: "An ancient Andean civilization etched enormous animal shapes into this desert plateau, visible only from the sky.", place: "Nazca Lines, Peru", lat: -14.7390, lon: -75.1300 },
+  { clue: "A meteor impact millions of years ago carved a bowl a kilometer wide into this Arizona desert.", place: "Barringer Meteor Crater, Arizona, USA", lat: 35.0270, lon: -111.0224 },
+  { clue: "A city built entirely on wooden pilings in a lagoon has been slowly sinking into the Adriatic for centuries.", place: "Venice, Italy (again — the sinking city)", lat: 45.4408, lon: 12.3155 },
+  { clue: "The last Tsar of Russia and his family were executed in this Ural Mountains city in 1918.", place: "Yekaterinburg, Russia", lat: 56.8389, lon: 60.6057 },
+  { clue: "A besieged city endured nearly 900 days of blockade during World War II, losing over a million residents.", place: "St. Petersburg (Siege of Leningrad)", lat: 59.9311, lon: 30.3609 },
+  { clue: "An underwater mountain range and an iceberg-strewn crossing claimed a famous liner on its maiden voyage in 1912.", place: "North Atlantic (near Newfoundland)", lat: 41.7325, lon: -49.9469 },
+  { clue: "A besieged fortress city on the Bosphorus finally fell to Ottoman cannons in 1453, ending a Byzantine empire.", place: "Constantinople (Istanbul)", lat: 41.0082, lon: 28.9784 },
+  { clue: "A gunpowder plot to blow up parliament was foiled beneath this London building in 1605.", place: "Houses of Parliament, London", lat: 51.4995, lon: -0.1248 },
+  { clue: "Human ancestors' fossilized footprints, over 3.6 million years old, were found preserved in volcanic ash here.", place: "Laetoli, Tanzania", lat: -3.3833, lon: 35.3167 },
+  { clue: "A trove of early hominid fossils earned this South African region the nickname 'Cradle of Humankind.'", place: "Cradle of Humankind, South Africa", lat: -25.9333, lon: 27.7167 },
+  { clue: "A remote Pacific island's giant stone heads have puzzled visitors for centuries.", place: "Easter Island, Chile", lat: -27.1127, lon: -109.3497 },
+  { clue: "A medieval fortress city on a hilltop witnessed a Cathar sect's last stand against a crusade in 1244.", place: "Montségur, France", lat: 42.8752, lon: 1.8329 }
 ];
 
 const MAX_PTS = 5000;
@@ -771,7 +899,15 @@ function registerGuess(lon, lat){
   updateMarkers();
 }
 
+function shuffleQuestions(){
+  for(let i = questions.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [questions[i], questions[j]] = [questions[j], questions[i]];
+  }
+}
+
 document.getElementById('startBtn').addEventListener('click', () => {
+  shuffleQuestions();
   document.getElementById('intro').classList.add('hidden');
   document.getElementById('game').classList.remove('hidden');
   loadRound();
