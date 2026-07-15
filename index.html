@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -306,70 +307,116 @@ const texCanvas = document.createElement('canvas');
 texCanvas.width = TW; texCanvas.height = TH;
 const tctx = texCanvas.getContext('2d');
 
+// ---------- noise utilities (value noise + fbm) for organic-looking terrain/clouds/coastlines ----------
+function hashNoise(x, y, seed){
+  const s = Math.sin(x*127.1 + y*311.7 + seed*74.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+function valueNoise(x, y, seed){
+  const x0 = Math.floor(x), y0 = Math.floor(y);
+  const xf = x - x0, yf = y - y0;
+  const v00 = hashNoise(x0,y0,seed), v10 = hashNoise(x0+1,y0,seed);
+  const v01 = hashNoise(x0,y0+1,seed), v11 = hashNoise(x0+1,y0+1,seed);
+  const sx = xf*xf*(3-2*xf), sy = yf*yf*(3-2*yf);
+  const top = v00 + sx*(v10-v00), bot = v01 + sx*(v11-v01);
+  return top + sy*(bot-top);
+}
+function fbm(x, y, seed, octaves){
+  let total=0, amp=0.5, freq=1, maxAmp=0;
+  for(let i=0;i<octaves;i++){
+    total += valueNoise(x*freq, y*freq, seed) * amp;
+    maxAmp += amp;
+    amp *= 0.5; freq *= 2;
+  }
+  return total / maxAmp;
+}
+// subdivide a ring's edges and perturb perpendicular to each edge for a natural, non-polygonal coastline
+function jitterRing(ring, seed){
+  const segments = 4, amp = 1.6;
+  const out = [];
+  for(let i=0;i<ring.length;i++){
+    const a = ring[i], b = ring[(i+1)%ring.length];
+    out.push(a);
+    const dx = b[0]-a[0], dy = b[1]-a[1];
+    const len = Math.sqrt(dx*dx+dy*dy) || 1;
+    const px = -dy/len, py = dx/len;
+    for(let s=1;s<segments;s++){
+      const t = s/segments;
+      let lon = a[0] + dx*t, lat = a[1] + dy*t;
+      const n = (fbm(lon*2+seed, lat*2+seed, seed, 2) - 0.5) * 2 * amp;
+      out.push([lon + px*n, lat + py*n]);
+    }
+  }
+  return out;
+}
+const jitteredLand = landPolygons.map((ring, i) => jitterRing(ring, i*17.3));
+
 function buildTexture(){
-  // ocean base with subtle latitude gradient
+  // ocean base with latitude gradient
   const oceanGrad = tctx.createLinearGradient(0,0,0,TH);
-  oceanGrad.addColorStop(0, '#0d2c4a');
-  oceanGrad.addColorStop(0.5, '#155c8a');
-  oceanGrad.addColorStop(1, '#0d2c4a');
+  oceanGrad.addColorStop(0, '#0b2540');
+  oceanGrad.addColorStop(0.5, '#14608f');
+  oceanGrad.addColorStop(1, '#0b2540');
   tctx.fillStyle = oceanGrad;
   tctx.fillRect(0,0,TW,TH);
 
-  // subtle ocean texture blotches
-  for(let i=0;i<60;i++){
-    const x = Math.random()*TW, y = Math.random()*TH, r = 20+Math.random()*60;
-    const g = tctx.createRadialGradient(x,y,0,x,y,r);
-    const shade = Math.random() > 0.5 ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.05)';
-    g.addColorStop(0, shade);
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    tctx.fillStyle = g;
-    tctx.beginPath(); tctx.arc(x,y,r,0,Math.PI*2); tctx.fill();
-  }
-
-  // landmasses
-  const landShades = ['#5a7d43','#6b8c4d','#7c9a5a','#8a9b5f','#4f7038'];
-  landPolygons.forEach((ring, idx) => {
-    tctx.fillStyle = landShades[idx % landShades.length];
-    tctx.beginPath();
+  // rasterize a land mask on a scratch canvas so we can shade land organically per-pixel
+  const maskCanvas = document.createElement('canvas');
+  maskCanvas.width = TW; maskCanvas.height = TH;
+  const mctx = maskCanvas.getContext('2d');
+  mctx.fillStyle = '#ff0000';
+  jitteredLand.forEach(ring => {
+    mctx.beginPath();
     ring.forEach((pt,i) => {
-      const tx = (pt[0]+180)/360*TW;
-      const ty = (90-pt[1])/180*TH;
-      if(i===0) tctx.moveTo(tx,ty); else tctx.lineTo(tx,ty);
+      const tx = (pt[0]+180)/360*TW, ty = (90-pt[1])/180*TH;
+      if(i===0) mctx.moveTo(tx,ty); else mctx.lineTo(tx,ty);
     });
-    tctx.closePath();
-    tctx.fill();
-    tctx.strokeStyle = 'rgba(0,0,0,0.15)';
-    tctx.lineWidth = 0.7;
-    tctx.stroke();
+    mctx.closePath();
+    mctx.fill();
+  });
+  const mask = mctx.getImageData(0,0,TW,TH).data;
 
-    // terrain texture blotches inside a bounding box (rough, purely decorative)
-    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
-    ring.forEach(pt=>{
-      const tx=(pt[0]+180)/360*TW, ty=(90-pt[1])/180*TH;
-      minX=Math.min(minX,tx); maxX=Math.max(maxX,tx);
-      minY=Math.min(minY,ty); maxY=Math.max(maxY,ty);
-    });
-    tctx.save();
+  // per-pixel organic shading: fbm-driven terrain color on land, subtle depth variation on ocean
+  const img = tctx.getImageData(0,0,TW,TH);
+  const d = img.data;
+  for(let y=0;y<TH;y++){
+    for(let x=0;x<TW;x++){
+      const idx = (y*TW+x)*4;
+      const isLand = mask[idx] > 200 && mask[idx+1] < 60;
+      const nx = x/28, ny = y/28;
+      if(isLand){
+        const elev = fbm(nx, ny, 5.2, 5);
+        const moisture = fbm(nx+50, ny+50, 9.1, 4);
+        let r,g,b;
+        if(elev < 0.42){ // lowland green
+          r = 74 + moisture*30; g = 112 + moisture*35; b = 58 + moisture*20;
+        } else if(elev < 0.6){ // hill/savanna
+          r = 128 + moisture*40; g = 118 + moisture*30; b = 72 + moisture*15;
+        } else { // mountain/arid
+          r = 150 + elev*60; g = 128 + elev*40; b = 105 + elev*30;
+        }
+        d[idx] = Math.min(255, r); d[idx+1] = Math.min(255, g); d[idx+2] = Math.min(255, b);
+      } else {
+        const depth = fbm(nx*1.4, ny*1.4, 3.3, 4);
+        d[idx]   = Math.min(255, d[idx]   + (depth-0.5)*22);
+        d[idx+1] = Math.min(255, d[idx+1] + (depth-0.5)*22);
+        d[idx+2] = Math.min(255, d[idx+2] + (depth-0.5)*14);
+      }
+    }
+  }
+  tctx.putImageData(img, 0, 0);
+
+  // coastline edge
+  tctx.strokeStyle = 'rgba(20,35,20,0.25)';
+  tctx.lineWidth = 0.6;
+  jitteredLand.forEach(ring => {
     tctx.beginPath();
     ring.forEach((pt,i) => {
       const tx = (pt[0]+180)/360*TW, ty = (90-pt[1])/180*TH;
       if(i===0) tctx.moveTo(tx,ty); else tctx.lineTo(tx,ty);
     });
     tctx.closePath();
-    tctx.clip();
-    const blobs = Math.max(3, Math.round((maxX-minX)*(maxY-minY)/900));
-    for(let i=0;i<blobs;i++){
-      const bx = minX + Math.random()*(maxX-minX);
-      const by = minY + Math.random()*(maxY-minY);
-      const br = 6 + Math.random()*22;
-      const g = tctx.createRadialGradient(bx,by,0,bx,by,br);
-      const light = Math.random() > 0.5;
-      g.addColorStop(0, light ? 'rgba(220,200,140,0.18)' : 'rgba(40,55,25,0.18)');
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      tctx.fillStyle = g;
-      tctx.beginPath(); tctx.arc(bx,by,br,0,Math.PI*2); tctx.fill();
-    }
-    tctx.restore();
+    tctx.stroke();
   });
 
   // polar ice caps
@@ -384,21 +431,24 @@ function buildTexture(){
   tctx.fillStyle = southIce;
   tctx.fillRect(0,TH*0.89,TW,TH*0.11);
 
-  // cloud cover
-  for(let i=0;i<55;i++){
-    const cx = Math.random()*TW, cy = TH*0.12 + Math.random()*TH*0.76;
-    const clusterSize = 2 + Math.floor(Math.random()*4);
-    for(let j=0;j<clusterSize;j++){
-      const ox = cx + (Math.random()-0.5)*40;
-      const oy = cy + (Math.random()-0.5)*18;
-      const r = 10 + Math.random()*24;
-      const g = tctx.createRadialGradient(ox,oy,0,ox,oy,r);
-      g.addColorStop(0, 'rgba(255,255,255,0.55)');
-      g.addColorStop(1, 'rgba(255,255,255,0)');
-      tctx.fillStyle = g;
-      tctx.beginPath(); tctx.arc(ox,oy,r,0,Math.PI*2); tctx.fill();
+  // fbm cloud layer, painted directly into the pixel buffer for soft organic swirls
+  const img2 = tctx.getImageData(0,0,TW,TH);
+  const d2 = img2.data;
+  for(let y=0;y<TH;y++){
+    for(let x=0;x<TW;x++){
+      const nx = x/60, ny = y/60;
+      const c = fbm(nx, ny, 22.4, 5);
+      const cloud = Math.max(0, (c - 0.55) / 0.45); // 0..1 above threshold
+      if(cloud > 0){
+        const idx = (y*TW+x)*4;
+        const a = cloud * 0.85;
+        d2[idx]   = d2[idx]*(1-a)   + 255*a;
+        d2[idx+1] = d2[idx+1]*(1-a) + 255*a;
+        d2[idx+2] = d2[idx+2]*(1-a) + 255*a;
+      }
     }
   }
+  tctx.putImageData(img2, 0, 0);
 }
 buildTexture(); // pre-draw a stylized fallback immediately so texData is always valid
 let texData = tctx.getImageData(0,0,TW,TH).data;
