@@ -7,7 +7,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');
 
 :root{
-  --bg:#0b0f1a;
+  --bg:#05070d;
   --panel:#f4f6f9;
   --ink:#12172a;
   --accent:#4fd1c5;
@@ -79,19 +79,42 @@ body{
 }
 
 .globe-frame{
+  position:relative;
   border-radius:14px;
-  padding:16px 0;
+  padding:20px 0;
   display:flex;
   justify-content:center;
+  background-image:
+    radial-gradient(1px 1px at 10% 20%, rgba(255,255,255,0.6), transparent),
+    radial-gradient(1px 1px at 25% 65%, rgba(255,255,255,0.4), transparent),
+    radial-gradient(1px 1px at 40% 15%, rgba(255,255,255,0.5), transparent),
+    radial-gradient(1px 1px at 60% 80%, rgba(255,255,255,0.35), transparent),
+    radial-gradient(1px 1px at 75% 35%, rgba(255,255,255,0.55), transparent),
+    radial-gradient(1px 1px at 88% 60%, rgba(255,255,255,0.4), transparent),
+    radial-gradient(1px 1px at 15% 85%, rgba(255,255,255,0.3), transparent),
+    radial-gradient(1px 1px at 55% 45%, rgba(255,255,255,0.4), transparent),
+    radial-gradient(1px 1px at 95% 15%, rgba(255,255,255,0.5), transparent);
 }
-#globeSvg{
+.globe-stage{
+  position:relative;
   width:100%;
   max-width:420px;
-  height:auto;
+  aspect-ratio:1/1;
+}
+#globeCanvas, #markerSvg{
+  position:absolute;
+  top:0; left:0;
+  width:100%;
+  height:100%;
+}
+#globeCanvas{
+  border-radius:50%;
+  filter:drop-shadow(0 0 22px rgba(79,209,197,0.25));
   touch-action:none;
   cursor:grab;
 }
-#globeSvg:active{cursor:grabbing;}
+#globeCanvas:active{cursor:grabbing;}
+#markerSvg{pointer-events:none;}
 
 .hint-text{
   text-align:center;
@@ -178,14 +201,14 @@ body{
 <div class="wrap">
 
   <div id="intro" class="center-card">
-    <h1>🌐 Globe Trivia</h1>
-    <p>Nine geography questions. Spin the globe, click where you think the answer is, and score points based on how close you land — up to 5,000 per round.</p>
-    <button class="start-btn" id="startBtn">Start</button>
+    <h1>🛰️ Globe Trivia</h1>
+    <p>Nine geography questions. Spin the satellite view, click where you think the answer is, and score points based on how close you land — up to 5,000 per round.</p>
+    <button class="start-btn" id="startBtn" disabled>Loading imagery…</button>
   </div>
 
   <div id="game" class="hidden">
     <div class="top-bar">
-      <div class="title">🌐 Globe Trivia</div>
+      <div class="title">🛰️ Globe Trivia</div>
       <div class="stats">
         <div><span class="stat-label">Round</span><span class="stat-value" id="roundNum">1/9</span></div>
         <div><span class="stat-label">Score</span><span class="stat-value" id="totalScore">0</span></div>
@@ -198,14 +221,14 @@ body{
     </div>
 
     <div class="globe-frame">
-      <svg id="globeSvg" viewBox="0 0 500 500">
-        <circle id="ocean" cx="250" cy="250" r="230" fill="#152a44" stroke="#0a1826" stroke-width="1"></circle>
-        <path id="graticule" fill="none" stroke="rgba(255,255,255,0.10)" stroke-width="0.5"></path>
-        <path id="land" fill="#3d5a80" stroke="#2a4162" stroke-width="0.6"></path>
-        <path id="arcLine" fill="none" stroke="#f2b84b" stroke-width="2.5" stroke-dasharray="5,4"></path>
-        <text id="pinMark" class="hidden" font-size="24" text-anchor="middle">📍</text>
-        <text id="guessMark" class="hidden" font-size="18" text-anchor="middle">🎯</text>
-      </svg>
+      <div class="globe-stage">
+        <canvas id="globeCanvas" width="460" height="460"></canvas>
+        <svg id="markerSvg" viewBox="0 0 460 460">
+          <path id="arcLine" fill="none" stroke="#f2b84b" stroke-width="2.5" stroke-dasharray="5,4"></path>
+          <text id="pinMark" class="hidden" font-size="24" text-anchor="middle">📍</text>
+          <text id="guessMark" class="hidden" font-size="18" text-anchor="middle">🎯</text>
+        </svg>
+      </div>
     </div>
     <div class="hint-text" id="hintText">Drag to spin the globe. Click to lock in your answer.</div>
 
@@ -253,7 +276,7 @@ let answered = false;
 let guessLL = null;
 const results = [];
 
-// ---------- simplified world landmasses (embedded, no network needed) ----------
+// ---------- simplified world landmasses (used to paint the texture, not for rendering directly) ----------
 const landPolygons = [
   [[-168,66],[-155,71],[-130,70],[-95,68],[-75,62],[-65,50],[-60,45],[-65,40],[-75,35],
    [-80,25],[-87,21],[-97,16],[-92,14],[-84,9],[-79,8],[-83,15],[-95,20],[-105,22],
@@ -274,15 +297,183 @@ const landPolygons = [
   [[-45,60],[-30,60],[-20,68],[-25,78],[-45,80],[-55,70],[-45,60]] // Greenland
 ];
 
-// ---------- projection math (hand-rolled orthographic, no libraries) ----------
-const CX = 250, CY = 250, R = 230;
-let rotation = [ -20, -15 ]; // [yaw, pitch] in degrees; view center = [-yaw, -pitch]
-
 function toRad(d){ return d * Math.PI / 180; }
 function toDeg(r){ return r * 180 / Math.PI; }
 
-// project a lon/lat point to screen coords. Always returns {x,y,visible}.
-// If not visible (back of globe), x/y are clamped to the horizon rim so filled shapes don't distort wildly.
+// ---------- build the equirectangular "satellite" texture once, offscreen ----------
+let TW = 720, TH = 360;
+const texCanvas = document.createElement('canvas');
+texCanvas.width = TW; texCanvas.height = TH;
+const tctx = texCanvas.getContext('2d');
+
+function buildTexture(){
+  // ocean base with subtle latitude gradient
+  const oceanGrad = tctx.createLinearGradient(0,0,0,TH);
+  oceanGrad.addColorStop(0, '#0d2c4a');
+  oceanGrad.addColorStop(0.5, '#155c8a');
+  oceanGrad.addColorStop(1, '#0d2c4a');
+  tctx.fillStyle = oceanGrad;
+  tctx.fillRect(0,0,TW,TH);
+
+  // subtle ocean texture blotches
+  for(let i=0;i<60;i++){
+    const x = Math.random()*TW, y = Math.random()*TH, r = 20+Math.random()*60;
+    const g = tctx.createRadialGradient(x,y,0,x,y,r);
+    const shade = Math.random() > 0.5 ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.05)';
+    g.addColorStop(0, shade);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    tctx.fillStyle = g;
+    tctx.beginPath(); tctx.arc(x,y,r,0,Math.PI*2); tctx.fill();
+  }
+
+  // landmasses
+  const landShades = ['#5a7d43','#6b8c4d','#7c9a5a','#8a9b5f','#4f7038'];
+  landPolygons.forEach((ring, idx) => {
+    tctx.fillStyle = landShades[idx % landShades.length];
+    tctx.beginPath();
+    ring.forEach((pt,i) => {
+      const tx = (pt[0]+180)/360*TW;
+      const ty = (90-pt[1])/180*TH;
+      if(i===0) tctx.moveTo(tx,ty); else tctx.lineTo(tx,ty);
+    });
+    tctx.closePath();
+    tctx.fill();
+    tctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    tctx.lineWidth = 0.7;
+    tctx.stroke();
+
+    // terrain texture blotches inside a bounding box (rough, purely decorative)
+    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+    ring.forEach(pt=>{
+      const tx=(pt[0]+180)/360*TW, ty=(90-pt[1])/180*TH;
+      minX=Math.min(minX,tx); maxX=Math.max(maxX,tx);
+      minY=Math.min(minY,ty); maxY=Math.max(maxY,ty);
+    });
+    tctx.save();
+    tctx.beginPath();
+    ring.forEach((pt,i) => {
+      const tx = (pt[0]+180)/360*TW, ty = (90-pt[1])/180*TH;
+      if(i===0) tctx.moveTo(tx,ty); else tctx.lineTo(tx,ty);
+    });
+    tctx.closePath();
+    tctx.clip();
+    const blobs = Math.max(3, Math.round((maxX-minX)*(maxY-minY)/900));
+    for(let i=0;i<blobs;i++){
+      const bx = minX + Math.random()*(maxX-minX);
+      const by = minY + Math.random()*(maxY-minY);
+      const br = 6 + Math.random()*22;
+      const g = tctx.createRadialGradient(bx,by,0,bx,by,br);
+      const light = Math.random() > 0.5;
+      g.addColorStop(0, light ? 'rgba(220,200,140,0.18)' : 'rgba(40,55,25,0.18)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      tctx.fillStyle = g;
+      tctx.beginPath(); tctx.arc(bx,by,br,0,Math.PI*2); tctx.fill();
+    }
+    tctx.restore();
+  });
+
+  // polar ice caps
+  const northIce = tctx.createLinearGradient(0,0,0,TH*0.11);
+  northIce.addColorStop(0, 'rgba(240,248,255,0.95)');
+  northIce.addColorStop(1, 'rgba(240,248,255,0)');
+  tctx.fillStyle = northIce;
+  tctx.fillRect(0,0,TW,TH*0.11);
+  const southIce = tctx.createLinearGradient(0,TH,0,TH*0.89);
+  southIce.addColorStop(0, 'rgba(240,248,255,0.95)');
+  southIce.addColorStop(1, 'rgba(240,248,255,0)');
+  tctx.fillStyle = southIce;
+  tctx.fillRect(0,TH*0.89,TW,TH*0.11);
+
+  // cloud cover
+  for(let i=0;i<55;i++){
+    const cx = Math.random()*TW, cy = TH*0.12 + Math.random()*TH*0.76;
+    const clusterSize = 2 + Math.floor(Math.random()*4);
+    for(let j=0;j<clusterSize;j++){
+      const ox = cx + (Math.random()-0.5)*40;
+      const oy = cy + (Math.random()-0.5)*18;
+      const r = 10 + Math.random()*24;
+      const g = tctx.createRadialGradient(ox,oy,0,ox,oy,r);
+      g.addColorStop(0, 'rgba(255,255,255,0.55)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      tctx.fillStyle = g;
+      tctx.beginPath(); tctx.arc(ox,oy,r,0,Math.PI*2); tctx.fill();
+    }
+  }
+}
+buildTexture(); // pre-draw a stylized fallback immediately so texData is always valid
+let texData = tctx.getImageData(0,0,TW,TH).data;
+
+function sampleTexture(lonDeg, latDeg){
+  let lon = ((lonDeg + 540) % 360) - 180;
+  let tx = Math.floor((lon+180)/360*TW);
+  let ty = Math.floor((90-latDeg)/180*TH);
+  if(tx<0) tx=0; if(tx>=TW) tx=TW-1;
+  if(ty<0) ty=0; if(ty>=TH) ty=TH-1;
+  const idx = (ty*TW+tx)*4;
+  return [texData[idx], texData[idx+1], texData[idx+2]];
+}
+
+function onTextureReady(){
+  const btn = document.getElementById('startBtn');
+  btn.disabled = false;
+  btn.textContent = 'Start';
+  renderSphere();
+}
+
+// Try to load real NASA "Blue Marble" satellite imagery (land/ocean/ice/cloud composite).
+// Falls back to the procedural texture above if the network is unavailable or the image is blocked.
+let settled = false;
+const earthImg = new Image();
+earthImg.crossOrigin = 'anonymous';
+const fallbackTimer = setTimeout(() => {
+  if(settled) return;
+  settled = true;
+  onTextureReady();
+}, 5000);
+
+earthImg.onload = () => {
+  if(settled) return;
+  settled = true;
+  clearTimeout(fallbackTimer);
+  try{
+    TW = earthImg.naturalWidth;
+    TH = earthImg.naturalHeight;
+    texCanvas.width = TW; texCanvas.height = TH;
+    tctx.drawImage(earthImg, 0, 0, TW, TH);
+    texData = tctx.getImageData(0,0,TW,TH).data; // throws if canvas is tainted (CORS)
+    onTextureReady();
+  } catch(e){
+    // CORS-tainted canvas or other failure — rebuild the stylized fallback at default size
+    TW = 720; TH = 360;
+    texCanvas.width = TW; texCanvas.height = TH;
+    buildTexture();
+    texData = tctx.getImageData(0,0,TW,TH).data;
+    onTextureReady();
+  }
+};
+earthImg.onerror = () => {
+  if(settled) return;
+  settled = true;
+  clearTimeout(fallbackTimer);
+  onTextureReady();
+};
+earthImg.src = 'https://commons.wikimedia.org/wiki/Special:FilePath/Land_ocean_ice_cloud_1024.jpg';
+
+// ---------- sphere projection ----------
+const canvas = document.getElementById('globeCanvas');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const CX = W/2, CY = H/2, R = W/2 - 6;
+
+let rotation = [ -20, -15 ]; // [yaw, pitch] degrees; view center = [-yaw,-pitch]
+
+// light direction fixed in view space (so shading looks consistent as globe spins)
+const LIGHT = normalize3([-0.5, 0.45, 0.75]);
+function normalize3(v){
+  const m = Math.sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]);
+  return [v[0]/m, v[1]/m, v[2]/m];
+}
+
 function project(lonDeg, latDeg){
   const lambda = toRad(lonDeg), phi = toRad(latDeg);
   const lambda0 = toRad(-rotation[0]), phi0 = toRad(-rotation[1]);
@@ -292,13 +483,12 @@ function project(lonDeg, latDeg){
   let yn = Math.cos(phi0)*Math.sin(phi) - Math.sin(phi0)*Math.cos(phi)*Math.cos(dl);
   const visible = cosC > 0;
   if(!visible){
-    const mag = Math.sqrt(xn*xn + yn*yn) || 1;
-    xn /= mag; yn /= mag;
+    const mag = Math.sqrt(xn*xn+yn*yn) || 1;
+    xn/=mag; yn/=mag;
   }
   return { x: CX + R*xn, y: CY - R*yn, visible };
 }
 
-// invert a screen point to lon/lat, or null if outside the visible disk
 function invert(px, py){
   const dx = (px - CX) / R;
   const dy = (CY - py) / R;
@@ -325,8 +515,6 @@ function haversineKm(lat1, lon1, lat2, lon2){
   const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
   return Re * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
-
-// spherical slerp between two lon/lat points, returns lon/lat at parameter t
 function toVec3(lonDeg, latDeg){
   const lon = toRad(lonDeg), lat = toRad(latDeg);
   return [ Math.cos(lat)*Math.cos(lon), Math.cos(lat)*Math.sin(lon), Math.sin(lat) ];
@@ -342,63 +530,65 @@ function vec3ToLonLat(v){
   return [toDeg(lon), toDeg(lat)];
 }
 
-// ---------- drawing ----------
-const oceanEl = document.getElementById('ocean');
-const graticuleEl = document.getElementById('graticule');
-const landEl = document.getElementById('land');
+// ---------- per-pixel raycast render of the sphere ----------
+const outImage = ctx.createImageData(W,H);
+const outData = outImage.data;
+
+function renderSphere(){
+  const lambda0 = toRad(-rotation[0]), phi0 = toRad(-rotation[1]);
+  const sinPhi0 = Math.sin(phi0), cosPhi0 = Math.cos(phi0);
+  outData.fill(0);
+  for(let py=0; py<H; py++){
+    const dy = (CY - py) / R;
+    for(let px=0; px<W; px++){
+      const dx = (px - CX) / R;
+      const rho2 = dx*dx + dy*dy;
+      if(rho2 > 1) continue;
+      const rho = Math.sqrt(rho2);
+      const c = rho < 1e-6 ? 0 : Math.asin(Math.min(1,rho));
+      const sinC = Math.sin(c), cosC = Math.cos(c);
+      let phi, lambda;
+      if(rho < 1e-6){
+        phi = phi0; lambda = lambda0;
+      } else {
+        phi = Math.asin( cosC*sinPhi0 + (dy*sinC*cosPhi0)/rho );
+        lambda = lambda0 + Math.atan2( dx*sinC, rho*cosPhi0*cosC - dy*sinPhi0*sinC );
+      }
+      const lonDeg = toDeg(lambda), latDeg = toDeg(phi);
+      const [r0,g0,b0] = sampleTexture(lonDeg, latDeg);
+
+      // view-space normal for lighting: (xn, yn, zn) with zn = cosC (towards viewer)
+      const xn = rho<1e-6 ? 0 : dx*sinC/rho;
+      const yn = rho<1e-6 ? 0 : dy*sinC/rho;
+      const zn = cosC;
+      let light = xn*LIGHT[0] + yn*LIGHT[1] + zn*LIGHT[2];
+      light = Math.max(0.25, light); // ambient floor
+
+      // atmosphere rim glow near the limb
+      const rim = Math.pow(rho, 6) * 0.5;
+
+      const idx = (py*W+px)*4;
+      outData[idx]   = Math.min(255, r0*light + rim*90);
+      outData[idx+1] = Math.min(255, g0*light + rim*140);
+      outData[idx+2] = Math.min(255, b0*light + rim*200);
+      outData[idx+3] = 255;
+    }
+  }
+  ctx.putImageData(outImage, 0, 0);
+  updateMarkers();
+}
+
+let renderQueued = false;
+function scheduleRender(){
+  if(renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => { renderQueued = false; renderSphere(); });
+}
+
+// ---------- marker overlay (SVG) ----------
 const arcEl = document.getElementById('arcLine');
 const pinEl = document.getElementById('pinMark');
 const guessEl = document.getElementById('guessMark');
-
-function buildLandPath(){
-  let d = '';
-  for(const ring of landPolygons){
-    let piece = '';
-    for(let i=0;i<ring.length;i++){
-      const p = project(ring[i][0], ring[i][1]);
-      piece += (i===0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1) + ' ';
-    }
-    d += piece + 'Z ';
-  }
-  return d.trim();
-}
-
-function buildGraticulePath(){
-  let d = '';
-  // meridians every 30 deg
-  for(let lon=-180; lon<180; lon+=30){
-    let penDown = false;
-    for(let lat=-80; lat<=80; lat+=4){
-      const p = project(lon, lat);
-      if(p.visible){
-        d += (penDown ? 'L' : 'M') + p.x.toFixed(1) + ',' + p.y.toFixed(1) + ' ';
-        penDown = true;
-      } else penDown = false;
-    }
-  }
-  // parallels every 30 deg
-  for(let lat=-60; lat<=60; lat+=30){
-    let penDown = false;
-    for(let lon=-180; lon<=180; lon+=4){
-      const p = project(lon, lat);
-      if(p.visible){
-        d += (penDown ? 'L' : 'M') + p.x.toFixed(1) + ',' + p.y.toFixed(1) + ' ';
-        penDown = true;
-      } else penDown = false;
-    }
-  }
-  return d.trim();
-}
-
-function isVisibleLL(lonDeg, latDeg){
-  return project(lonDeg, latDeg).visible;
-}
-
-function render(){
-  graticuleEl.setAttribute('d', buildGraticulePath());
-  landEl.setAttribute('d', buildLandPath());
-  updateMarkers();
-}
 
 function updateMarkers(){
   const q = questions[currentRound];
@@ -426,11 +616,10 @@ function updateMarkers(){
     let dot = v0[0]*v1[0]+v0[1]*v1[1]+v0[2]*v1[2];
     dot = Math.max(-1, Math.min(1, dot));
     const omega = Math.acos(dot);
-    let d = '';
-    let penDown = false;
     if(omega < 1e-6){
       arcEl.removeAttribute('d');
     } else {
+      let d = '', penDown = false;
       for(let i=0;i<=100;i++){
         const t = i/100;
         const v = slerp(v0, v1, t, omega);
@@ -447,43 +636,41 @@ function updateMarkers(){
 }
 
 // ---------- drag to rotate ----------
-const svgEl = document.getElementById('globeSvg');
 let dragging = false, dragStart = null, moved = false;
 
-function toSvgPoint(clientX, clientY){
-  const pt = svgEl.createSVGPoint();
-  pt.x = clientX; pt.y = clientY;
-  const ctm = svgEl.getScreenCTM().inverse();
-  const svgP = pt.matrixTransform(ctm);
-  return [svgP.x, svgP.y];
+function toCanvasPoint(clientX, clientY){
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return [ (clientX-rect.left)*scaleX, (clientY-rect.top)*scaleY ];
 }
 
-svgEl.addEventListener('pointerdown', (event) => {
+canvas.addEventListener('pointerdown', (event) => {
   dragging = true; moved = false;
-  const [x,y] = toSvgPoint(event.clientX, event.clientY);
+  const [x,y] = toCanvasPoint(event.clientX, event.clientY);
   dragStart = {x, y, r0: rotation.slice()};
-  svgEl.setPointerCapture(event.pointerId);
+  canvas.setPointerCapture(event.pointerId);
 });
 
-svgEl.addEventListener('pointermove', (event) => {
+canvas.addEventListener('pointermove', (event) => {
   if(!dragging) return;
-  const [x,y] = toSvgPoint(event.clientX, event.clientY);
+  const [x,y] = toCanvasPoint(event.clientX, event.clientY);
   const dx = x - dragStart.x, dy = y - dragStart.y;
   if(Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
   const sensitivity = 0.25;
   rotation[0] = dragStart.r0[0] + dx * sensitivity;
   rotation[1] = Math.max(-90, Math.min(90, dragStart.r0[1] - dy * sensitivity));
-  render();
+  scheduleRender();
 });
 
-svgEl.addEventListener('pointerup', (event) => {
+canvas.addEventListener('pointerup', (event) => {
   dragging = false;
   if(!moved) handleClick(event);
 });
 
 function handleClick(event){
   if(answered) return;
-  const [x,y] = toSvgPoint(event.clientX, event.clientY);
+  const [x,y] = toCanvasPoint(event.clientX, event.clientY);
   const inv = invert(x, y);
   if(!inv) return;
   guessLL = inv;
@@ -501,7 +688,7 @@ function loadRound(){
   document.getElementById('clueText').textContent = q.clue;
   document.getElementById('hintText').textContent = "Drag to spin the globe. Click to lock in your answer.";
   document.getElementById('resultPanel').classList.remove('show');
-  render();
+  renderSphere();
 }
 
 function scoreFor(km){
@@ -531,7 +718,7 @@ function registerGuess(lon, lat){
   document.getElementById('totalScore').textContent = totalScore.toLocaleString();
   document.getElementById('hintText').textContent = "Answer locked in. Drag to look around, or move on.";
   document.getElementById('resultPanel').classList.add('show');
-  render();
+  updateMarkers();
 }
 
 document.getElementById('startBtn').addEventListener('click', () => {
@@ -568,8 +755,6 @@ document.getElementById('replayBtn').addEventListener('click', () => {
   document.getElementById('final').classList.add('hidden');
   document.getElementById('intro').classList.remove('hidden');
 });
-
-render();
 </script>
 </body>
 </html>
