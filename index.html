@@ -114,7 +114,7 @@ body{
   aspect-ratio:1/1;
   border-radius:50%;
   overflow:hidden;
-  transition:width .12s ease;
+  transition:width .12s ease, border-radius .2s ease;
   box-shadow:0 0 22px rgba(79,209,197,0.25);
 }
 .globe-stage.zoomed-overlay{
@@ -126,6 +126,9 @@ body{
   transition:none;
   box-shadow:0 0 60px rgba(79,209,197,0.35);
 }
+.globe-stage.flat-mode{
+  border-radius:16px;
+}
 .globe-zoom-wrap{
   position:absolute;
   inset:0;
@@ -136,19 +139,13 @@ body{
   width:100%;
   height:100%;
 }
-#globeCanvas{
-  border-radius:50%;
+#globeCanvas, #detailCanvas{
+  border-radius:inherit;
   touch-action:none;
   cursor:grab;
 }
-#globeCanvas:active{cursor:grabbing;}
+#globeCanvas:active, #detailCanvas:active{cursor:grabbing;}
 #markerSvg{pointer-events:none;}
-#detailCanvas{
-  border-radius:50%;
-  touch-action:none;
-  cursor:grab;
-}
-#detailCanvas:active{cursor:grabbing;}
 .detail-loading{
   position:absolute;
   top:50%; left:50%;
@@ -209,7 +206,7 @@ body{
   font-size:0.9rem;
   color:#f2a0a0;
   background:rgba(0,0,0,0.3);
-  border-radius:50%;
+  border-radius:inherit;
 }
 
 .hint-text{
@@ -300,7 +297,7 @@ body{
 
   <div id="intro" class="center-card">
     <h1>🛰️ Globe Trivia</h1>
-    <p>Landmarks from every continent. Spin the satellite view, click where you think the answer is, and score points based on how close you land — up to 5,000 per round.</p>
+    <p>Landmarks from every continent. Spin the globe, click where you think the answer is, and score points based on how close you land — up to 5,000 per round. Zoom in for a close-up satellite view.</p>
     <button class="start-btn" id="startBtn" disabled>Loading imagery…</button>
     <p id="introMapError" class="hidden" style="color:#b3261e; font-size:0.85rem; margin-top:14px; margin-bottom:0;"></p>
   </div>
@@ -530,29 +527,6 @@ const texCanvas = document.createElement('canvas');
 const tctx = texCanvas.getContext('2d');
 let texData = null;
 
-function sampleTexture(lonDeg, latDeg){
-  let lon = ((lonDeg + 540) % 360) - 180;
-  const fx = (lon+180)/360*TW - 0.5;
-  const fy = (90-latDeg)/180*TH - 0.5;
-  let x0 = Math.floor(fx), y0 = Math.floor(fy);
-  const sx = fx - x0, sy = fy - y0;
-  let x1 = x0 + 1, y1 = y0 + 1;
-  // wrap horizontally (longitude is cyclic), clamp vertically (poles are edges, not cyclic)
-  x0 = ((x0 % TW) + TW) % TW;
-  x1 = ((x1 % TW) + TW) % TW;
-  y0 = Math.max(0, Math.min(TH-1, y0));
-  y1 = Math.max(0, Math.min(TH-1, y1));
-
-  const i00 = (y0*TW+x0)*4, i10 = (y0*TW+x1)*4, i01 = (y1*TW+x0)*4, i11 = (y1*TW+x1)*4;
-  const w00 = (1-sx)*(1-sy), w10 = sx*(1-sy), w01 = (1-sx)*sy, w11 = sx*sy;
-
-  return [
-    texData[i00]  *w00 + texData[i10]  *w10 + texData[i01]  *w01 + texData[i11]  *w11,
-    texData[i00+1]*w00 + texData[i10+1]*w10 + texData[i01+1]*w01 + texData[i11+1]*w11,
-    texData[i00+2]*w00 + texData[i10+2]*w10 + texData[i01+2]*w01 + texData[i11+2]*w11
-  ];
-}
-
 function onTextureReady(){
   const btn = document.getElementById('startBtn');
   btn.disabled = false;
@@ -571,7 +545,7 @@ function showMapError(message){
 }
 
 
-// ---------- sphere projection ----------
+// ---------- sphere projection (the main globe view) ----------
 const canvas = document.getElementById('globeCanvas');
 const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
@@ -580,12 +554,12 @@ const R = W/2 - 6; // fixed: the sphere always fully fits the raster; zoom scale
 
 let rotation = [ -20, -15 ]; // [yaw, pitch] degrees; view center = [-yaw,-pitch]
 
-// light direction fixed in view space (so shading looks consistent as globe spins)
-const LIGHT = normalize3([-0.5, 0.45, 0.75]);
+// light direction fixed in view space (so shading looks consistent as the globe spins)
 function normalize3(v){
   const m = Math.sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]);
   return [v[0]/m, v[1]/m, v[2]/m];
 }
+const LIGHT = normalize3([-0.5, 0.45, 0.75]);
 
 function project(lonDeg, latDeg){
   const lambda = toRad(lonDeg), phi = toRad(latDeg);
@@ -643,6 +617,26 @@ function vec3ToLonLat(v){
   return [toDeg(lon), toDeg(lat)];
 }
 
+function sampleTexture(lonDeg, latDeg){
+  let lon = ((lonDeg + 540) % 360) - 180;
+  const fx = (lon+180)/360*TW - 0.5;
+  const fy = (90-latDeg)/180*TH - 0.5;
+  let x0 = Math.floor(fx), y0 = Math.floor(fy);
+  const sx = fx - x0, sy = fy - y0;
+  let x1 = x0 + 1, y1 = y0 + 1;
+  x0 = ((x0 % TW) + TW) % TW;
+  x1 = ((x1 % TW) + TW) % TW;
+  y0 = Math.max(0, Math.min(TH-1, y0));
+  y1 = Math.max(0, Math.min(TH-1, y1));
+  const i00 = (y0*TW+x0)*4, i10 = (y0*TW+x1)*4, i01 = (y1*TW+x0)*4, i11 = (y1*TW+x1)*4;
+  const w00 = (1-sx)*(1-sy), w10 = sx*(1-sy), w01 = (1-sx)*sy, w11 = sx*sy;
+  return [
+    texData[i00]  *w00 + texData[i10]  *w10 + texData[i01]  *w01 + texData[i11]  *w11,
+    texData[i00+1]*w00 + texData[i10+1]*w10 + texData[i01+1]*w01 + texData[i11+1]*w11,
+    texData[i00+2]*w00 + texData[i10+2]*w10 + texData[i01+2]*w01 + texData[i11+2]*w11
+  ];
+}
+
 // ---------- per-pixel raycast render of the sphere ----------
 const outImage = ctx.createImageData(W,H);
 const outData = outImage.data;
@@ -671,14 +665,12 @@ function renderSphere(){
       const lonDeg = toDeg(lambda), latDeg = toDeg(phi);
       const [r0,g0,b0] = sampleTexture(lonDeg, latDeg);
 
-      // view-space normal for lighting: (xn, yn, zn) with zn = cosC (towards viewer)
       const xn = rho<1e-6 ? 0 : dx*sinC/rho;
       const yn = rho<1e-6 ? 0 : dy*sinC/rho;
       const zn = cosC;
       let light = xn*LIGHT[0] + yn*LIGHT[1] + zn*LIGHT[2];
-      light = Math.max(0.25, light); // ambient floor
+      light = Math.max(0.25, light);
 
-      // atmosphere rim glow near the limb
       const rim = rho2*rho2*rho2 * 0.5;
 
       const idx = (py*W+px)*4;
@@ -711,11 +703,12 @@ function scheduleDetailOverlayRender(){
   });
 }
 
-// ---------- detail zoom mode (real satellite imagery via Esri World Imagery export) ----------
+// ---------- detail zoom mode: flat, non-circular, real satellite imagery ----------
 // Past a zoom threshold we stop CSS-scaling the fixed low-res sphere texture (which just gets
-// blurrier) and instead fetch real aerial/satellite imagery for the current view from a free
-// public imagery service, the same way Google Earth/Maps reveal more real detail as you zoom in.
+// blurrier) and switch to a flat close-up view that fetches real aerial/satellite imagery for
+// the current area, the same way Google Earth/Maps reveal more real detail as you zoom in.
 const DETAIL_THRESHOLD = 2.2;
+const BORDER_SPAN_CUTOFF = 6; // hide country/state lines once zoomed in this close
 let detailMode = false;
 let detailCenter = [0, 0]; // [lon, lat] of the view center
 let detailSpanDeg = 40;    // degrees of latitude visible top-to-bottom
@@ -728,7 +721,7 @@ const detailLoadingEl = document.getElementById('detailLoading');
 const detailAttributionEl = document.getElementById('detailAttribution');
 
 function detailLonSpan(){
-  return detailSpanDeg / Math.max(0.15, Math.cos(toRad(detailCenter[1])));
+  return detailSpanDeg / Math.max(0.12, Math.cos(toRad(detailCenter[1])));
 }
 
 // Flat projector for the current detail view, matching the {x,y,visible} shape the sphere's
@@ -752,6 +745,61 @@ function detailInvert(px, py){
 
 function currentProjector(){ return detailMode ? detailProject : project; }
 
+// Renders the flat detail view: real fetched satellite imagery once loaded, otherwise a cropped
+// draw of the embedded low-res base texture (cheap drawImage, no per-pixel loop).
+function renderDetail(){
+  detailCtx.clearRect(0, 0, DW, DH);
+  if(realImage){
+    detailCtx.drawImage(realImage, 0, 0, DW, DH);
+    detailAttributionEl.classList.remove('hidden');
+  } else {
+    detailAttributionEl.classList.add('hidden');
+    drawBaseTextureInto(detailCtx, DW, DH, detailCenter, detailSpanDeg);
+  }
+  renderBorders();
+  updateMarkers();
+}
+
+// Draws the embedded low-res world texture cropped/panned to the given view, handling
+// antimeridian wraparound by drawing in up to two pieces.
+function drawBaseTextureInto(targetCtx, destW, destH, center, spanDeg){
+  const lonSpan = spanDeg / Math.max(0.12, Math.cos(toRad(center[1])));
+  const lat0 = Math.max(-90, center[1] - spanDeg/2);
+  const lat1 = Math.min(90, center[1] + spanDeg/2);
+  const sy = (90 - lat1) / 180 * TH;
+  const sh = (lat1 - lat0) / 180 * TH;
+  if(sh <= 0) return;
+
+  const lon0 = center[0] - lonSpan/2;
+  const degToDestPx = destW / lonSpan;
+
+  function blit(sliceLon0, sliceSpan){
+    if(sliceSpan <= 0) return;
+    const sx = (sliceLon0 + 180) / 360 * TW;
+    const sw = sliceSpan / 360 * TW;
+    const destX = (sliceLon0 - lon0) * degToDestPx;
+    const destW2 = sliceSpan * degToDestPx;
+    if(sw <= 0 || destW2 <= 0) return;
+    targetCtx.drawImage(texCanvas, sx, sy, sw, sh, destX, 0, destW2, destH);
+  }
+  function drawSlice(a, b){
+    let lo = a, hi = b;
+    while(lo < -180){ lo += 360; hi += 360; }
+    while(lo >= 180){ lo -= 360; hi -= 360; }
+    const span = hi - lo;
+    if(lo + span <= 180){
+      blit(lo, span);
+    } else {
+      const firstSpan = 180 - lo;
+      blit(lo, firstSpan);
+      drawSlice(-180, -180 + (span - firstSpan));
+    }
+  }
+  drawSlice(lon0, lon0 + lonSpan);
+}
+
+// ---------- real satellite imagery (Esri World Imagery export), fetched on demand when zoomed in ----------
+let realImage = null;
 let detailFetchTimer = null;
 let detailFetchToken = 0;
 function scheduleDetailFetch(){
@@ -773,9 +821,9 @@ function fetchDetailImage(){
   img.crossOrigin = 'anonymous';
   img.onload = () => {
     if(myToken !== detailFetchToken) return; // superseded by a newer request
-    detailCtx.clearRect(0,0,DW,DH);
-    detailCtx.drawImage(img, 0, 0, DW, DH);
+    realImage = img;
     detailLoadingEl.classList.add('hidden');
+    if(detailMode) renderDetail();
   };
   img.onerror = () => {
     if(myToken !== detailFetchToken) return;
@@ -789,12 +837,12 @@ function enterDetailMode(){
   detailMode = true;
   detailCenter = [-rotation[0], -rotation[1]];
   detailSpanDeg = DETAIL_SPAN_AT_THRESHOLD;
+  realImage = null;
   canvas.classList.add('hidden');
   detailCanvasEl.classList.remove('hidden');
-  detailAttributionEl.classList.remove('hidden');
+  globeStage.classList.add('flat-mode');
   scheduleDetailFetch();
-  renderBorders();
-  updateMarkers();
+  renderDetail();
 }
 
 function exitDetailMode(){
@@ -803,6 +851,7 @@ function exitDetailMode(){
   detailCanvasEl.classList.add('hidden');
   detailAttributionEl.classList.add('hidden');
   detailLoadingEl.classList.add('hidden');
+  globeStage.classList.remove('flat-mode');
   renderSphere();
 }
 
@@ -829,6 +878,11 @@ function buildRingsPath(rings){
 }
 
 function renderBorders(){
+  if(detailMode && detailSpanDeg < BORDER_SPAN_CUTOFF){
+    countryBordersEl.setAttribute('d', '');
+    stateBordersEl.setAttribute('d', '');
+    return;
+  }
   countryBordersEl.setAttribute('d', buildRingsPath(countryBorderRings));
   stateBordersEl.setAttribute('d', buildRingsPath(usStateBorderRings));
 }
@@ -884,10 +938,10 @@ function updateMarkers(){
   }
 }
 
-// ---------- drag to rotate + pinch/scroll to zoom ----------
+// ---------- drag to rotate/pan + pinch/scroll to zoom ----------
 const activePointers = new Map(); // pointerId -> {x, y} in canvas coordinates
-let dragStart = null;   // for single-pointer rotate
-let pinchStart = null;  // for two-pointer zoom
+let dragStart = null;
+let pinchStart = null;
 let moved = false;
 
 const globeFrame = document.getElementById('globeFrame');
@@ -903,11 +957,10 @@ function pointerDist(){
   return Math.sqrt(dx*dx + dy*dy);
 }
 
-// Zoom resizes the whole globe object (the circle itself grows/shrinks), not just its contents.
-// At 1x or below it stays inline in the card. Past 1x it pops into a centered fixed overlay.
-// Past DETAIL_THRESHOLD it switches from the fixed low-res sphere texture to real fetched
-// satellite imagery for the current view, so continuing to zoom actually reveals more detail
-// instead of just blurring the same image bigger.
+// Zoom resizes the whole globe object (the circle/rect itself grows/shrinks), not just its
+// contents. At 1x or below it stays inline in the card. Past 1x it pops into a centered fixed
+// overlay. Past DETAIL_THRESHOLD it switches from the fixed low-res sphere texture to a flat,
+// non-circular close-up view with real fetched satellite imagery.
 function setZoom(newZoom){
   const wasDetail = detailMode;
   zoomLevel = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, newZoom));
@@ -930,10 +983,10 @@ function setZoom(newZoom){
   } else if(!shouldBeDetail && wasDetail){
     exitDetailMode();
   } else if(shouldBeDetail && wasDetail){
-    // still in detail mode, just adjust how much area is visible and refetch
     detailSpanDeg = Math.max(DETAIL_MIN_SPAN, DETAIL_SPAN_AT_THRESHOLD * (DETAIL_THRESHOLD / zoomLevel));
     scheduleDetailOverlayRender();
     scheduleDetailFetch();
+    renderDetail();
   }
 }
 
@@ -943,9 +996,8 @@ zoomBackdrop.addEventListener('click', () => setZoom(1));
 // no matter which of the two canvases is currently visible.
 const zoomWrapEl = document.getElementById('globeZoomWrap');
 
-function activeRect(){ return zoomWrapEl.getBoundingClientRect(); }
 function toCanvasPoint(clientX, clientY){
-  const rect = activeRect();
+  const rect = zoomWrapEl.getBoundingClientRect();
   const refW = detailMode ? DW : W;
   const refH = detailMode ? DH : H;
   const scaleX = refW / rect.width;
@@ -985,7 +1037,7 @@ zoomWrapEl.addEventListener('pointermove', (event) => {
       detailCenter[0] = dragStart.center0[0] - (dx / DW) * lonSpan;
       detailCenter[1] = Math.max(-89, Math.min(89, dragStart.center0[1] + (dy / DH) * detailSpanDeg));
       detailCenter[0] = ((detailCenter[0]+540)%360)-180;
-      scheduleDetailOverlayRender();
+      renderDetail();
       if(moved) scheduleDetailFetch();
     } else {
       const sensitivity = 0.25;
@@ -1034,6 +1086,20 @@ function loadRound(){
   answered = false;
   guessLL = null;
   rotation = [ (currentRound * 47 + 10) % 360 - 180, -10 ];
+  realImage = null;
+  if(detailMode){
+    detailMode = false;
+    canvas.classList.remove('hidden');
+    detailCanvasEl.classList.add('hidden');
+    detailAttributionEl.classList.add('hidden');
+    detailLoadingEl.classList.add('hidden');
+    globeStage.classList.remove('flat-mode');
+  }
+  zoomLevel = 1;
+  globeStage.classList.remove('zoomed-overlay');
+  zoomBackdrop.classList.add('hidden');
+  const available = globeFrame.clientWidth - 4;
+  globeStage.style.width = Math.min(BASE_PX, available) + 'px';
   const q = questions[currentRound];
   document.getElementById('roundNum').textContent = `${currentRound+1}/${questions.length}`;
   document.getElementById('roundLabel').textContent = `Round ${currentRound+1}`;
