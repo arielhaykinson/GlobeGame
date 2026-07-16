@@ -700,6 +700,17 @@ function scheduleRender(){
   requestAnimationFrame(() => { renderQueued = false; renderSphere(); });
 }
 
+let detailOverlayQueued = false;
+function scheduleDetailOverlayRender(){
+  if(detailOverlayQueued) return;
+  detailOverlayQueued = true;
+  requestAnimationFrame(() => {
+    detailOverlayQueued = false;
+    renderBorders();
+    updateMarkers();
+  });
+}
+
 // ---------- detail zoom mode (real satellite imagery via Esri World Imagery export) ----------
 // Past a zoom threshold we stop CSS-scaling the fixed low-res sphere texture (which just gets
 // blurrier) and instead fetch real aerial/satellite imagery for the current view from a free
@@ -921,8 +932,7 @@ function setZoom(newZoom){
   } else if(shouldBeDetail && wasDetail){
     // still in detail mode, just adjust how much area is visible and refetch
     detailSpanDeg = Math.max(DETAIL_MIN_SPAN, DETAIL_SPAN_AT_THRESHOLD * (DETAIL_THRESHOLD / zoomLevel));
-    renderBorders();
-    updateMarkers();
+    scheduleDetailOverlayRender();
     scheduleDetailFetch();
   }
 }
@@ -975,8 +985,7 @@ zoomWrapEl.addEventListener('pointermove', (event) => {
       detailCenter[0] = dragStart.center0[0] - (dx / DW) * lonSpan;
       detailCenter[1] = Math.max(-89, Math.min(89, dragStart.center0[1] + (dy / DH) * detailSpanDeg));
       detailCenter[0] = ((detailCenter[0]+540)%360)-180;
-      renderBorders();
-      updateMarkers();
+      scheduleDetailOverlayRender();
       if(moved) scheduleDetailFetch();
     } else {
       const sensitivity = 0.25;
